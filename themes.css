@@ -42,6 +42,7 @@ html[data-theme=editorial]{--bg:#eeeae1;--paper:#fbfaf5;--ink:#252d2b;--muted:#7
 html[data-theme=night]{--bg:#151f29;--paper:#202e39;--ink:#eceddf;--muted:#acb8b9;--green:#bfcca3;--green2:#93b4aa;--pale:#2b3b45;--line:#3a4a51;--amber:#d9b978;--red:#efb19e;--serif:"Microsoft YaHei UI","PingFang SC",system-ui,sans-serif}
 [data-theme=night] .receipt-footer b,[data-theme=night] .icon-picker legend{color:#c3d2b1}[data-theme=night] .icon-picker legend small,[data-theme=night] .date-label{color:#a8bcb2}
 [data-theme=night] .payment-methods legend,[data-theme=night] .payment-option small,[data-theme=night] .payment-success dt,[data-theme=night] .payment-sheet .payment-hint{color:#b9c9b8}
+[data-theme=night] .supply-card.low .supply-stage{background:#4b4333}[data-theme=night] .chore-card .chore-visual{background:#30434b}
 [data-theme=night] body{background:#151f29;color:#eceddf}
 [data-theme=night] .app-shell{grid-template-columns:108px minmax(0,1fr)}
 [data-theme=night] .sidebar{background:#111b24;border-color:#33414a;padding:23px 9px}[data-theme=night] .brand{padding:0 0 24px;justify-content:center}[data-theme=night] .brand>div{display:none}[data-theme=night] .brand-mark{border-radius:50%;background:#d0b67f;color:#263540;transform:none}

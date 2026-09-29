@@ -70,7 +70,7 @@ async function main(){
     }
     assert.equal(await p.evaluate(()=>JSON.stringify(spaceCollections.map(k=>state[k]))),fingerprint,'Themes must never mutate business data');
     await go('expenses');await p.locator('[data-action=settle][data-id=e2]').click();await p.waitForTimeout(260);await p.screenshot({path:path.join(out,`${theme}-payment.png`)});await close();
-    await go('items');await action('add-item').click();await p.locator('[name=name]').fill('主题交互 '+theme);await p.screenshot({path:path.join(out,`${theme}-form.png`)});await submit();const id=(await snap()).spaces[0].items.at(-1).id;await p.locator(`[data-action=delete-entry][data-id="${id}"]`).click();await submit();
+    await go('items');await action('add-item').click();await p.locator('[name=name]').fill('主题交互 '+theme);await p.waitForTimeout(260);await p.screenshot({path:path.join(out,`${theme}-form.png`)});await submit();const id=(await snap()).spaces[0].items.at(-1).id;await p.locator(`[data-action=delete-entry][data-id="${id}"]`).click();await submit();
   }
   await p.reload({waitUntil:'networkidle'});assert.equal(await p.locator('html').getAttribute('data-theme'),'night');
   await settings('demo');const download=p.waitForEvent('download');await action('export-spaces').click();assert.match((await download).suggestedFilename(),/^wuli-spaces-.*\.json$/);await close();
