@@ -58,7 +58,7 @@ function go(p){
   if(!keyboardInput&&!reduceMotion()&&previous!==next)panel.animate([{opacity:.35,transform:`translateX(${next>previous?9:-9}px)`},{opacity:1,transform:'translateX(0)'}],{duration:240,easing:'cubic-bezier(.22,1,.36,1)'});
   window.scrollTo({top:0,behavior:'instant'});
 }
-function pageHead(kicker,title,sub,button=''){return `<div class="page-head"><div><span class="eyebrow">${kicker}</span><h1>${title}</h1><p>${sub}</p></div>${button}</div>`}
+function pageHead(kicker,title,sub,button=''){return `<div class="page-head"><div><span class="eyebrow">${kicker}</span><h1>${title}</h1><p>${sub}</p></div>${currentSpace()&&page!=='home'?sceneArt(page,true):''}${button}</div>`}
 function pendingFor(id){return state.expenses.reduce((sum,e)=>sum+(!e.settled.includes(id)&&e.participants.includes(id)?e.shares[id]:0),0)}
 function render(){
   if(!currentSpace())page='home';
@@ -141,6 +141,8 @@ document.addEventListener('keydown',e=>{
   if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}
 });
 document.querySelector('#modal-root').addEventListener('click',e=>{if(e.target.classList.contains('modal-backdrop'))closeModal()});
+refreshDemoPresentation();
+document.querySelector('.sidebar-postcard').innerHTML=sceneArt('items');
 init();checkInvitation();
 // Refresh urgency when a deadline passes, without interrupting forms.
 setInterval(()=>{if(!document.hidden&&!document.querySelector('.modal')&&['home','chores','expenses'].includes(page))render()},60000);

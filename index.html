@@ -6,8 +6,10 @@
   <meta name="theme-color" content="#245c46">
   <title>屋里｜合租生活管家</title>
   <meta name="description" content="费用、值日、公共物品和室友公约，一起把合租生活过清楚。">
-  <link rel="stylesheet" href="./design.css?v=5">
-  <link rel="stylesheet" href="./themes.css?v=5">
+  <link rel="stylesheet" href="./design.css?v=6">
+  <link rel="stylesheet" href="./themes.css?v=6">
+  <link rel="stylesheet" href="./scenes.css?v=6">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2716%27 fill=%27%23335e49%27/%3E%3Ctext x=%2732%27 y=%2746%27 text-anchor=%27middle%27 font-size=%2742%27 fill=%27%23f7edcb%27%3E屋%3C/text%3E%3C/svg%3E">
 </head>
 <body>
   <div class="app-shell">
@@ -15,7 +17,7 @@
       <div class="brand"><span class="brand-mark">屋</span><div><strong>屋里</strong><small>合租生活管家</small></div></div>
       <button class="house-label space-switcher" data-action="choose-space" aria-label="切换或新建空间"><span>我们的共享空间 ↗</span><b id="space-label">春和里 · 6 栋</b><small id="space-members">一起照顾这个家</small></button>
       <nav id="nav" aria-label="主要导航"></nav>
-      <div class="sidebar-postcard"><span>生活里的小默契</span><p>住在一起，<br>日子也有了温度。</p><i>make room for each other.</i></div>
+      <div class="sidebar-postcard sidebar-garden" aria-hidden="true"></div>
       <div class="side-note"><span class="pulse"></span><div><b>演示模式</b><small>数据仅保存在当前浏览器</small></div></div>
     </aside>
     <main>
@@ -29,16 +31,17 @@
       </header>
       <div id="storage-alert" class="storage-alert" role="alert" hidden></div>
       <section id="content" class="content" aria-live="polite"></section>
-      <footer class="site-footer"><span>屋里 WULI · 把小事理清，把日子过好。</span><span>演示空间 · 数据仅保存在当前浏览器</span></footer>
+      <footer class="site-footer"><span>演示空间 · 数据仅保存在当前浏览器</span></footer>
     </main>
     <nav id="bottom-nav" class="bottom-nav" aria-label="手机导航"></nav>
   </div>
   <div id="modal-root"></div>
   <div id="toast" class="toast" role="status"></div>
-  <script src="./art.js?v=5"></script>
-  <script src="./features.js?v=5"></script>
-  <script src="./spaces.js?v=5"></script>
-  <script src="./views.js?v=5"></script>
-  <script src="./app.js?v=5"></script>
+  <script src="./art.js?v=6"></script>
+  <script src="./features.js?v=6"></script>
+  <script src="./spaces.js?v=6"></script>
+  <script src="./views.js?v=6"></script>
+  <script src="./scenes.js?v=6"></script>
+  <script src="./app.js?v=6"></script>
 </body>
 </html>

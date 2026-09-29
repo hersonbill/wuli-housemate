@@ -4,9 +4,9 @@ const path = require('node:path');
 const http = require('node:http');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
-const output = path.join(root, 'artifacts', 'design-v5');
+const output = path.join(root, 'artifacts', 'design-v6');
 fs.mkdirSync(output,{recursive:true});
-const publicFiles = new Set(['index.html','app.js','art.js','features.js','spaces.js','views.js','design.css','themes.css']);
+const publicFiles = new Set(['index.html','app.js','art.js','features.js','spaces.js','views.js','design.css','themes.css','scenes.css','scenes.js']);
 const server = http.createServer((req,res)=>{
   const name=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\//,'')||'index.html';
   if(!publicFiles.has(name)){res.writeHead(404);res.end();return}
@@ -174,7 +174,7 @@ async function main(){
     state.expenses=Array.from({length:5},(_,i)=>({id:'bill'+i,title:'近期账单'+i,amount:100,participants:['u1'],shares:{u1:100},payer:'u2',settled:[],dueAt:relativeDate(i-1),iconId:'money'}));
     save();go('home');
   });
-  assert.equal(await page.locator('.attention-item').count(),5);
+  assert.equal(await page.locator('.attention-item').count(),4);
   assert.equal(await page.locator('.attention-item').first().getAttribute('data-queue-id'),'逾期验收');
   assert.equal(await page.locator('.primary-route').count(),1);
   await page.locator('[data-action=expand-queue]').click();
@@ -256,7 +256,7 @@ async function main(){
   await page.emulateMedia({reducedMotion:'no-preference'});await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(()=>document.body.classList.contains('keyboard-input')),true);
   assert.deepEqual(failures,[]);
-  const result={base,passed:true,assertions:['interactive evening scene','balanced 100/3 split','reload persistence','custom split mismatch and success','expense details','reassign chores','restore overdue status','inventory underflow guard','restock and logs','agreement reconfirmation','Escape dismissal','25 responsive layouts','rapid navigation interruption','reduced motion','keyboard motion opt-out','three mock payment methods and receipts','cancelled payments never settle','payment persistence','calendar and weekday preview','deadline sorting and reschedule','24 user-selected illustrations','creator-only deletion in all four modules','deletion cancellation and persistence','invalid amounts and empty participants','legacy migration preserving custom data','single priority queue capped at five rows','no duplicate home controls','priority and disclosure','all four deep links highlight exact record','navigation is non-mutating','claimed items do not duplicate work','empty overview has no fake tasks','settings preserve identity and preferences','low stock ordering and replenishment','ambient motion frame changes','off-screen animation pause','motion toggle persistence','no uncaught browser errors'],layout,errors:failures};
+  const result={base,passed:true,assertions:['interactive evening scene','balanced 100/3 split','reload persistence','custom split mismatch and success','expense details','reassign chores','restore overdue status','inventory underflow guard','restock and logs','agreement reconfirmation','Escape dismissal','25 responsive layouts','rapid navigation interruption','reduced motion','keyboard motion opt-out','three mock payment methods and receipts','cancelled payments never settle','payment persistence','calendar and weekday preview','deadline sorting and reschedule','24 user-selected illustrations','creator-only deletion in all four modules','deletion cancellation and persistence','invalid amounts and empty participants','legacy migration preserving custom data','cross-category priority queue capped at four rows','no duplicate home controls','priority and disclosure','all four deep links highlight exact record','navigation is non-mutating','claimed items do not duplicate work','empty overview has no fake tasks','settings preserve identity and preferences','low stock ordering and replenishment','ambient motion frame changes','off-screen animation pause','motion toggle persistence','no uncaught browser errors'],layout,errors:failures};
   fs.writeFileSync(path.join(output,'qa-results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.close()});

@@ -103,12 +103,14 @@ function startPayment(id){
 function rescheduleChore(id){const x=state.chores.find(x=>x.id===id);if(!x)return;openModal('调整完成时间',`<p class="form-note">${esc(x.area)} · 保存后会按日期重新排序</p>${dateFields(x.dueAt)}`,fd=>{const dueAt=selectedDeadline(fd);if(!dueAt)return error('请选择有效日期与时间');x.dueAt=dueAt;save();closeModal();render();toast('完成时间已更新，排班已重新排序')});bindDateFields()}
 function ambientArt(){return `<div class="ambient-decoration" aria-hidden="true"><span class="drifting-leaf leaf-a">${icon('leaf')}</span><span class="drifting-leaf leaf-b">${icon('leaf')}</span><svg class="breeze" viewBox="0 0 200 80" fill="none"><path d="M4 47c40-39 70 27 118-6s62-10 68-7M25 63c32-22 58 16 83-4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>`}
 let ambientObserver=null,ambientVisible=false;
+const visibleScenes=new Set();
 function syncAmbient(){
   const hero=document.querySelector('.hero'),enabled=state.motionEnabled!==false&&!reduceMotion();
   hero?.classList.toggle('motion-enabled',enabled);hero?.classList.toggle('ambient-running',enabled&&ambientVisible&&!document.hidden&&!document.body.classList.contains('modal-open'));
+  document.querySelectorAll('.living-scene').forEach(scene=>scene.classList.toggle('ambient-running',enabled&&visibleScenes.has(scene)&&!document.hidden&&!document.body.classList.contains('modal-open')));
   const b=document.querySelector('[data-action=toggle-motion]');if(b){b.setAttribute('aria-pressed',String(enabled));b.textContent=reduceMotion()?'系统已关闭':enabled?'已开启':'已关闭';b.disabled=reduceMotion()}
 }
-function observeAmbient(){ambientObserver?.disconnect();ambientVisible=false;const hero=document.querySelector('.hero');if(!hero)return;ambientObserver=new IntersectionObserver(entries=>{ambientVisible=entries[0].isIntersecting;syncAmbient()},{threshold:.1});ambientObserver.observe(hero);syncAmbient()}
+function observeAmbient(){ambientObserver?.disconnect();visibleScenes.clear();ambientVisible=false;ambientObserver=new IntersectionObserver(entries=>{for(const e of entries){if(e.target.matches('.hero'))ambientVisible=e.isIntersecting;if(e.isIntersecting)visibleScenes.add(e.target);else visibleScenes.delete(e.target)}syncAmbient()},{threshold:.1});document.querySelectorAll('.hero,.living-scene').forEach(el=>ambientObserver.observe(el));syncAmbient()}
 document.addEventListener('visibilitychange',()=>{syncAmbient();if(!document.hidden&&typeof state!=='undefined'&&!document.querySelector('.modal'))render()});
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',syncAmbient);
 

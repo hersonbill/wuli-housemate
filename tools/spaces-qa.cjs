@@ -1,7 +1,7 @@
 const {chromium}=require('C:/Users/PC/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
-const root=path.resolve(__dirname,'..'),out=path.join(root,'artifacts','spaces-v5');fs.mkdirSync(out,{recursive:true});
-const files=new Set(['index.html','app.js','features.js','spaces.js','views.js','art.js','design.css','themes.css']);
+const root=path.resolve(__dirname,'..'),out=path.join(root,'artifacts','spaces-v6');fs.mkdirSync(out,{recursive:true});
+const files=new Set(['index.html','app.js','features.js','spaces.js','views.js','art.js','design.css','themes.css','scenes.css','scenes.js']);
 const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1)||'index.html';if(!files.has(name)){res.writeHead(404);return res.end()}res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript; charset=utf-8':name.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8');res.end(fs.readFileSync(path.join(root,name)))});
 let browser;const errors=[];
 async function main(){
