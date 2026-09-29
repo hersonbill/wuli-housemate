@@ -126,7 +126,9 @@ async function main(){
   await page.locator('[name=amount]').fill('100');await submit();const expense=(await snapshot()).expenses[0];
   assert.equal(expense.createdBy,'u1');assert.equal(expense.payer,'u2');assert.equal(expense.iconId,'wifi');
   await nav('items');await page.locator('[data-action=add-item]').click();
-  await page.locator('[name=name]').fill('验收：咖啡杯');await page.locator('[name=qty]').fill('0');
+  await page.locator('[name=name]').fill('验收：咖啡杯');await page.locator('[name=qty]').fill('');
+  await page.locator('.modal [type=submit]').click();assert.match(await page.locator('#form-error').innerText(),/有效信息/);
+  await page.locator('[name=qty]').fill('0');
   await page.locator('[name=iconId][value=cup]').check();await submit();const item=(await snapshot()).items.at(-1);
   assert.equal(item.createdBy,'u1');assert.equal(item.iconId,'cup');
   await nav('rules');await page.locator('[data-action=add-rule]').click();
