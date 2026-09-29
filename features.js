@@ -73,17 +73,17 @@ function selectedDeadline(fd){
   return Number.isFinite(d.getTime())&&dateValue(d)===date?d.toISOString():null;
 }
 function bindDateFields(){const form=document.querySelector('form.modal');if(!form?.querySelector('.date-fields'))return;form.addEventListener('change',()=>{const iso=selectedDeadline(new FormData(form));form.querySelector('.date-preview').textContent=iso?deadlineText(iso):'请选择有效日期与时间'});form.querySelector('[type=date]').addEventListener('click',e=>{try{e.target.showPicker()}catch{/* Native calendar remains usable on unsupported browsers. */}})}
-function authorship(x,kind){return `<div class="authorship"><small>${x.createdBy?`${esc(person(x.createdBy).name)} 发布`:'旧记录 · 发布者未记录'}</small>${x.createdBy===state.currentUser?`<button class="delete-btn" data-action="delete-entry" data-kind="${kind}" data-id="${x.id}">删除</button>`:''}</div>`}
+function authorship(x,kind){return `<div class="authorship"><small>${x.createdBy?`${esc(person(x.createdBy).name)} 发布`:'旧记录 · 发布者未记录'}</small>${canDelete(x)?`<button class="delete-btn" data-action="delete-entry" data-kind="${kind}" data-id="${x.id}">删除</button>`:''}</div>`}
 function deleteEntry(kind,id){
   if(!['expenses','chores','items','rules'].includes(kind))return;
-  const x=state[kind].find(x=>x.id===id);if(!x||x.createdBy!==state.currentUser)return toast('仅发布者可以删除自己的记录');
-  openModal('删除这条记录？',`<div class="delete-confirm"><b>${esc(x.title||x.area||x.name)}</b><p>删除后，相关分摊、确认或流水也会从本演示空间移除。此操作无法撤销。</p><span class="tag">发布者：${esc(person(x.createdBy).name)}</span></div>`,()=>{if(x.createdBy!==state.currentUser)return error('当前身份不是发布者');state[kind]=state[kind].filter(entry=>entry.id!==id);save();closeModal();render();toast('记录已删除，首页已同步更新')},'确认删除');
+  const x=state[kind].find(x=>x.id===id);if(!x||!canDelete(x))return toast('仅发布者或房主可以删除记录');
+  openModal('删除这条记录？',`<div class="delete-confirm"><b>${esc(x.title||x.area||x.name)}</b><p>删除后，相关分摊、确认或流水也会从本演示空间移除。此操作无法撤销。</p><span class="tag">发布者：${esc(person(x.createdBy).name)}${isOwner()?' · 房主可管理所有记录':''}</span></div>`,()=>{if(!canDelete(x))return error('当前身份没有删除权限');activity(`删除了记录：${x.title||x.area||x.name}`);state[kind]=state[kind].filter(entry=>entry.id!==id);save();closeModal();render();toast('记录已删除，首页已同步更新')},'确认删除');
   document.querySelector('.modal [type=submit]').classList.add('danger-btn');
 }
 let paymentTimer=null,paymentSession=null;
 function cancelPayment(){clearTimeout(paymentTimer);paymentTimer=null;paymentSession=null}
 function startPayment(id){
-  const x=state.expenses.find(x=>x.id===id),user=state.currentUser;
+  const x=state.expenses.find(x=>x.id===id),user=state.currentUser,spaceId=state.spaceId;
   if(!x||!x.participants.includes(user)||x.settled.includes(user))return;
   openModal('结算这笔共同开支',`<div class="payment-sheet"><span class="demo-banner">演示支付 · 不会扣款，也不收集账户信息</span><p>${esc(x.title)}</p><strong class="payment-amount">${money(x.shares[user])}</strong><small>${esc(person(user).name)} → 垫付人 ${esc(person(x.payer).name)}</small><fieldset class="payment-methods"><legend>选择演示支付方式</legend>${[['wechat','微信支付','微'],['alipay','支付宝','支'],['card','银行卡','卡']].map(([id,name,symbol],i)=>`<label class="payment-option"><input type="radio" name="method" value="${id}" ${i===0?'checked':''}><span class="payment-logo pay-${id}">${symbol}</span><b>${name}</b><small>模拟</small></label>`).join('')}</fieldset><p class="payment-hint">选择方式不会结清账单。点击下方按钮，完成模拟支付后才会更新结清状态。</p><div class="payment-status" role="status"></div></div>`,(fd,form)=>{
     if(paymentSession)return;
@@ -92,7 +92,7 @@ function startPayment(id){
     form.querySelector('[type=submit]').disabled=true;form.querySelector('[type=submit]').textContent='正在模拟支付…';form.querySelectorAll('[name=method]').forEach(el=>el.disabled=true);
     form.querySelector('.payment-status').textContent='正在模拟处理，可以取消。不会发起真实交易。';
     paymentTimer=setTimeout(()=>{
-      if(paymentSession!==token||!form.isConnected||state.currentUser!==user)return;
+      if(paymentSession!==token||!form.isConnected||state.currentUser!==user||state.spaceId!==spaceId)return;
       const current=state.expenses.find(e=>e.id===id);if(!current||current.settled.includes(user)){cancelPayment();closeModal();return}
       current.settled.push(user);current.payments=current.payments||[];current.payments.push({id:uid('demo-pay-'),user,method,amount:current.shares[user],time:new Date().toISOString(),demo:true});save();render();
       form.querySelector('.payment-sheet').innerHTML=`<div class="payment-success"><span class="success-seal">${icon('check')}</span><h3>演示支付成功</h3><strong class="payment-amount">${money(current.shares[user])}</strong><p>已更新你在这笔账单中的结清状态</p><span class="demo-banner">仅模拟流程 · 实际扣款 ¥0.00</span><dl><dt>支付方式</dt><dd>${{wechat:'微信支付',alipay:'支付宝',card:'银行卡'}[method]}（演示）</dd><dt>完成时间</dt><dd>${deadlineText(new Date().toISOString())}</dd></dl></div>`;
@@ -104,11 +104,28 @@ function rescheduleChore(id){const x=state.chores.find(x=>x.id===id);if(!x)retur
 function ambientArt(){return `<div class="ambient-decoration" aria-hidden="true"><span class="drifting-leaf leaf-a">${icon('leaf')}</span><span class="drifting-leaf leaf-b">${icon('leaf')}</span><svg class="breeze" viewBox="0 0 200 80" fill="none"><path d="M4 47c40-39 70 27 118-6s62-10 68-7M25 63c32-22 58 16 83-4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>`}
 let ambientObserver=null,ambientVisible=false;
 function syncAmbient(){
-  const hero=document.querySelector('.hero');if(!hero)return;
-  const enabled=state.motionEnabled!==false&&!reduceMotion();
-  hero.classList.toggle('motion-enabled',enabled);hero.classList.toggle('ambient-running',enabled&&ambientVisible&&!document.hidden&&!document.body.classList.contains('modal-open'));
-  const b=hero.querySelector('[data-action=toggle-motion]');if(b){b.setAttribute('aria-pressed',String(enabled));b.textContent=reduceMotion()?'系统已减少动态效果':enabled?'微风轻动 · 开':'微风轻动 · 关';b.disabled=reduceMotion()}
+  const hero=document.querySelector('.hero'),enabled=state.motionEnabled!==false&&!reduceMotion();
+  hero?.classList.toggle('motion-enabled',enabled);hero?.classList.toggle('ambient-running',enabled&&ambientVisible&&!document.hidden&&!document.body.classList.contains('modal-open'));
+  const b=document.querySelector('[data-action=toggle-motion]');if(b){b.setAttribute('aria-pressed',String(enabled));b.textContent=reduceMotion()?'系统已关闭':enabled?'已开启':'已关闭';b.disabled=reduceMotion()}
 }
 function observeAmbient(){ambientObserver?.disconnect();ambientVisible=false;const hero=document.querySelector('.hero');if(!hero)return;ambientObserver=new IntersectionObserver(entries=>{ambientVisible=entries[0].isIntersecting;syncAmbient()},{threshold:.1});ambientObserver.observe(hero);syncAmbient()}
 document.addEventListener('visibilitychange',()=>{syncAmbient();if(!document.hidden&&typeof state!=='undefined'&&!document.querySelector('.modal'))render()});
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',syncAmbient);
+
+// The overview is an attention queue, not a second set of module controls.
+let homeExpanded=false;
+function homeQueue(){
+  const now=Date.now(),queue=[];
+  for(const x of myTodayChores()){const overdue=Date.parse(x.dueAt)<now;queue.push({kind:'chores',id:x.id,iconId:x.iconId,title:x.area,detail:deadlineText(x.dueAt)+' · 你负责',label:overdue?'值日逾期':'今日值日',rank:overdue?0:2,time:Date.parse(x.dueAt),action:'查看值日'})}
+  for(const x of myUrgentBills()){const overdue=Date.parse(x.dueAt)<now;queue.push({kind:'expenses',id:x.id,iconId:x.iconId,title:x.title,detail:'你待结算 '+money(x.shares[state.currentUser])+' · '+deadlineText(x.dueAt),label:overdue?'账单逾期':'即将到期',rank:overdue?0:3,time:Date.parse(x.dueAt),action:'去结算'})}
+  for(const x of lowItems()){if(x.claimedBy&&x.claimedBy!==state.currentUser)continue;queue.push({kind:'items',id:x.id,iconId:x.iconId,title:x.name,detail:(x.qty===0?'已经用完':`剩 ${x.qty}${x.unit}`)+' · '+(x.claimedBy?'你已认领，记得补货':'还没有人认领采购'),label:x.qty===0?'物品用完':'物品不足',rank:x.qty===0?1:4,time:x.qty/Math.max(1,x.threshold),action:x.claimedBy?'记录补货':'查看物品'})}
+  for(const x of state.rules.filter(x=>!x.confirmed.includes(state.currentUser)))queue.push({kind:'rules',id:x.id,iconId:x.iconId,title:x.title,detail:`${currentConfirmations(x).length} / ${members().length} 位室友已确认，等你看看`,label:'公约待确认',rank:5,time:0,action:'查看公约'});
+  return queue.sort((a,b)=>a.rank-b.rank||a.time-b.time||a.id.localeCompare(b.id));
+}
+function openQueueEntry(kind,id){
+  if(!['expenses','chores','items','rules'].includes(kind)||!state[kind].some(x=>x.id===id))return toast('这条记录已不存在');
+  if(kind==='expenses')expenseMode='all';go(kind);
+  const target=[...document.querySelectorAll('[data-entry-id]')].find(el=>el.dataset.entryId===id);
+  if(target){target.classList.add('entry-focus');target.tabIndex=-1;target.scrollIntoView({block:'center',behavior:'instant'});target.focus({preventScroll:true})}
+}
+function spaceSettings(){openSpaceSettings('space')}

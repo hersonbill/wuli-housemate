@@ -4,9 +4,9 @@ const path = require('node:path');
 const http = require('node:http');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
-const output = path.join(root, 'artifacts', 'design-v3');
+const output = path.join(root, 'artifacts', 'design-v5');
 fs.mkdirSync(output,{recursive:true});
-const publicFiles = new Set(['index.html','app.js','art.js','features.js','views.js','design.css']);
+const publicFiles = new Set(['index.html','app.js','art.js','features.js','spaces.js','views.js','design.css','themes.css']);
 const server = http.createServer((req,res)=>{
   const name=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\//,'')||'index.html';
   if(!publicFiles.has(name)){res.writeHead(404);res.end();return}
@@ -23,16 +23,22 @@ async function main(){
   const page=await context.newPage();
   page.on('pageerror',e=>failures.push(e.message));
   await page.goto(base,{waitUntil:'networkidle'});
-  const snapshot=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('wuli_housemate_v1')));
+  const snapshot=()=>page.evaluate(()=>JSON.parse(JSON.stringify(state)));
   const nav=p=>page.locator(`#nav [data-page="${p}"]`).click();
   const close=async()=>{await page.locator('.modal .close').click();await page.locator('.modal').waitFor({state:'detached'})};
   const submit=async()=>{await page.locator('.modal button[type=submit]').click();await page.locator('.modal').waitFor({state:'detached'})};
+  const settings=async(tab='appearance')=>{await page.locator('[data-action=open-settings]').click();await page.locator(`[data-action=settings-tab][data-id=${tab}]`).click()};
+  const switchUser=async(id)=>{await settings('demo');await page.locator('#current-user').selectOption(id);await page.locator('.modal').waitFor({state:'detached'})};
+  assert.equal(await page.locator('.hero button,.stats,.dashboard-grid').count(),0,'No duplicate module cards or hero controls');
+  assert.equal(await page.locator('.attention-panel').count(),1);
+  assert.equal(await page.locator('.primary-route').count(),1);
   await page.screenshot({path:path.join(output,'desktop-home.png'),fullPage:true});
+  await settings();await page.waitForTimeout(280);await page.screenshot({path:path.join(output,'desktop-settings.png')});
   await page.locator('[data-action=toggle-light]').click();
   assert.equal(await page.locator('.hero').evaluate(el=>el.classList.contains('is-evening')),true);
-  await page.waitForTimeout(550);
+  await close();await page.waitForTimeout(550);
   await page.screenshot({path:path.join(output,'desktop-evening.png'),fullPage:true});
-  await page.locator('[data-action=toggle-light]').click();
+  await settings();await page.locator('[data-action=toggle-light]').click();await close();
   await page.waitForTimeout(550);
   for(const tab of ['expenses','chores','items','rules']){
     await nav(tab);await page.waitForTimeout(280);
@@ -64,11 +70,11 @@ async function main(){
   await page.locator('[data-action=item-change][data-kind=restock][data-id=i1]').click();await page.locator('[name=qty]').fill('5');await submit();data=await snapshot();assert.equal(data.items[0].qty,6);assert.equal(data.items[0].claimedBy,null);assert.equal(data.items[0].logs[0].type,'restock');
   await page.locator('[data-action=logs][data-id=i1]').click();assert.match(await page.locator('.modal').innerText(),/补货 5卷/);await close();
   await nav('rules');await page.locator('[data-action=edit-rule][data-id=r1]').click();await page.locator('[name=content]').fill('晚上十一点后使用耳机。');await submit();assert.deepEqual((await snapshot()).rules[0].confirmed,[]);
-  await page.locator('#current-user').selectOption('u2');await page.locator('[data-action=confirm-rule][data-id=r1]').click();assert.deepEqual((await snapshot()).rules[0].confirmed,['u2']);
+  await switchUser('u2');await page.locator('[data-action=confirm-rule][data-id=r1]').click();assert.deepEqual((await snapshot()).rules[0].confirmed,['u2']);
   await page.locator('[data-action=add-rule]').click();await page.keyboard.press('Escape');assert.equal(await page.locator('.modal').count(),0);
 
   // Payment cancellation, all three methods, success-only settlement and refresh.
-  await page.locator('#current-user').selectOption('u1');await nav('expenses');
+  await switchUser('u1');await nav('expenses');
   const originalOwed=await page.evaluate(()=>pendingFor('u1'));
   await page.locator('[data-action=settle][data-id=e2]').click();
   assert.equal(await page.locator('[name=method]').count(),3);
@@ -81,7 +87,7 @@ async function main(){
   await page.locator('.modal [type=submit]').click();await close();await page.waitForTimeout(1200);
   assert.equal((await snapshot()).expenses.find(x=>x.id==='e2').settled.includes('u1'),false,'Cancel processing must not settle');
   for(const [id,user,method] of [['e2','u1','alipay'],['e3','u1','card'],['e2','u2','wechat']]){
-    await page.locator('#current-user').selectOption(user);await page.locator(`[data-action=settle][data-id=${id}]`).click();
+    await switchUser(user);await page.locator(`[data-action=settle][data-id=${id}]`).click();
     await page.locator(`[name=method][value=${method}]`).check();
     await page.locator('.modal [type=submit]').click();
     assert.equal((await snapshot()).expenses.find(x=>x.id===id).settled.includes(user),false,'Not settled before mock success');
@@ -91,7 +97,7 @@ async function main(){
     await page.screenshot({path:path.join(output,`payment-success-${method}.png`)});
     await submit();
   }
-  await page.locator('#current-user').selectOption('u1');
+  await switchUser('u1');
   assert.ok(await page.evaluate(()=>pendingFor('u1'))<originalOwed);
   await page.reload({waitUntil:'networkidle'});assert.equal((await snapshot()).expenses.find(x=>x.id==='e2').payments[0].method,'alipay');
 
@@ -136,11 +142,11 @@ async function main(){
   await page.locator('[name=iconId][value=pet]').check();await submit();const rule=(await snapshot()).rules.at(-1);
   assert.equal(rule.createdBy,'u1');assert.equal(rule.iconId,'pet');
   for(const [kind,x] of [['expenses',expense],['chores',chore],['items',item],['rules',rule]]){
-    await nav(kind);await page.locator('#current-user').selectOption('u2');
+    await nav(kind);await switchUser('u2');
     assert.equal(await page.locator(`[data-action=delete-entry][data-id="${x.id}"]`).count(),0,'Other roommate has no delete action');
     await page.evaluate(({kind,id})=>deleteEntry(kind,id),{kind,id:x.id});
     assert.ok((await snapshot())[kind].some(y=>y.id===x.id),'Handler rejects unauthorized delete');
-    await page.locator('#current-user').selectOption('u1');
+    await switchUser('u1');
     await page.locator(`[data-action=delete-entry][data-id="${x.id}"]`).click();await close();
     assert.ok((await snapshot())[kind].some(y=>y.id===x.id),'Cancel preserves record');
     await page.locator(`[data-action=delete-entry][data-id="${x.id}"]`).click();await submit();
@@ -153,7 +159,7 @@ async function main(){
     const legacy=structuredClone(demo);legacy.items.push({id:'legacy-custom',name:'我的旧物品',qty:7,unit:'个',threshold:1,logs:[]});
     legacy.chores.push({id:'legacy-task',area:'旧时间',due:'有空的时候',person:'u1',status:'pending'});
     legacy.expenses.push({id:'legacy-expense',title:'旧账单',amount:100,payer:'u2',participants:['u1'],shares:{u1:100},settled:[],date:'旧日期'});
-    localStorage.setItem(STORE_KEY,JSON.stringify(legacy));
+    localStorage.removeItem(SPACE_STORE);localStorage.setItem(LEGACY_STORE,JSON.stringify(legacy));
   });
   await page.reload({waitUntil:'networkidle'});data=await snapshot();
   assert.equal(data.schemaVersion,2);assert.equal(data.items.at(-1).qty,7);assert.equal(data.items.at(-1).createdBy,null);
@@ -168,14 +174,33 @@ async function main(){
     state.expenses=Array.from({length:5},(_,i)=>({id:'bill'+i,title:'近期账单'+i,amount:100,participants:['u1'],shares:{u1:100},payer:'u2',settled:[],dueAt:relativeDate(i-1),iconId:'money'}));
     save();go('home');
   });
-  assert.equal(await page.locator('[data-summary=chores] .list-row').count(),2);
-  assert.match(await page.locator('[data-summary=chores]').innerText(),/逾期验收/);
-  assert.doesNotMatch(await page.locator('[data-summary=chores]').innerText(),/未来验收/);
-  assert.equal(await page.locator('[data-summary=items] .list-row').count(),3);
-  assert.match(await page.locator('[data-summary=items] .list-row').first().innerText(),/库存0/);
-  assert.equal(await page.locator('[data-summary=expenses] .list-row').count(),3);
-  await page.evaluate(()=>{state.items[0].qty=10;save();render()});
-  assert.doesNotMatch(await page.locator('[data-summary=items]').innerText(),/库存0/);
+  assert.equal(await page.locator('.attention-item').count(),5);
+  assert.equal(await page.locator('.attention-item').first().getAttribute('data-queue-id'),'逾期验收');
+  assert.equal(await page.locator('.primary-route').count(),1);
+  await page.locator('[data-action=expand-queue]').click();
+  const ids=await page.locator('.attention-item').evaluateAll(els=>els.map(el=>el.dataset.queueId));
+  assert.equal(new Set(ids).size,ids.length,'Each task appears once');
+  assert.ok(ids.includes('今日验收'));assert.ok(!ids.includes('未来验收'));
+  assert.ok(ids.indexOf('priority0')<ids.indexOf('今日验收'),'Empty stock precedes non-overdue chores');
+  const beforeJump=await snapshot();
+  await page.locator('[data-action=open-queue][data-id=priority0]').click();
+  assert.equal(await page.locator('.entry-focus').getAttribute('data-entry-id'),'priority0');
+  assert.deepEqual((await snapshot()).items,beforeJump.items,'Overview navigation never marks an item handled');
+  await page.locator('[data-action=item-change][data-kind=restock][data-id=priority0]').click();
+  await page.locator('[name=qty]').fill('10');await submit();await nav('home');
+  assert.equal(await page.locator('[data-queue-id=priority0]').count(),0,'Restocking clears queue entry');
+  await page.evaluate(()=>{state.items[1].claimedBy='u2';save();render()});
+  assert.equal(await page.locator('[data-queue-id=priority1]').count(),0,'Other roommate claims do not ask me to duplicate purchase');
+  assert.match(await page.locator('.attention-footer').innerText(),/已有其他室友认领/);
+  // Jump works for all four modules, including hidden-by-filter expenses.
+  await page.evaluate(()=>{state.rules[0].confirmed=[];save();render()});
+  for(const kind of ['expenses','chores','items','rules']){
+    const row=page.locator(`[data-action=open-queue][data-kind=${kind}]`).first();
+    const id=await row.getAttribute('data-id');
+    if(kind==='expenses')await page.evaluate(()=>{expenseMode='mine'});
+    await row.click();assert.equal(await page.locator('.entry-focus').getAttribute('data-entry-id'),id);
+    assert.equal(await page.evaluate(()=>page),kind);await nav('home');
+  }
 
   // Ambient motion toggle, persistence, off-screen pause and reduced-motion path.
   await page.mouse.click(700,100);await page.evaluate(()=>scrollTo(0,0));await page.waitForTimeout(200);
@@ -186,16 +211,19 @@ async function main(){
   await page.screenshot({path:path.join(output,'ambient-frame.png')});
   await page.setViewportSize({width:1440,height:500});await page.evaluate(()=>scrollTo(0,document.body.scrollHeight));await page.waitForTimeout(200);
   assert.equal(await page.locator('.floor-plant').evaluate(el=>getComputedStyle(el).animationPlayState),'paused');
-  await page.evaluate(()=>scrollTo(0,0));await page.locator('[data-action=toggle-motion]').click();
+  await page.evaluate(()=>scrollTo(0,0));await settings();await page.locator('[data-action=toggle-motion]').click();await close();
   assert.equal((await snapshot()).motionEnabled,false);
-  await page.reload({waitUntil:'networkidle'});assert.equal(await page.locator('[data-action=toggle-motion]').getAttribute('aria-pressed'),'false');
+  await page.reload({waitUntil:'networkidle'});await settings();assert.equal(await page.locator('[data-action=toggle-motion]').getAttribute('aria-pressed'),'false');
   await page.locator('[data-action=toggle-motion]').click();
   await page.emulateMedia({reducedMotion:'reduce'});
   assert.equal(await page.locator('.floor-plant').evaluate(el=>getComputedStyle(el).animationName),'none');
   assert.equal(await page.locator('[data-action=toggle-motion]').isDisabled(),true);
-  await page.emulateMedia({reducedMotion:'no-preference'});await page.setViewportSize({width:1440,height:1100});
+  await page.emulateMedia({reducedMotion:'no-preference'});await close();await page.setViewportSize({width:1440,height:1100});
+  await page.evaluate(()=>{state.expenses=[];state.chores=[];state.items=[];state.rules=[];render()});
+  assert.equal(await page.locator('.all-clear').count(),1);assert.equal(await page.locator('#content button').count(),0);
 
-  await nav('home');await page.evaluate(()=>{localStorage.removeItem('wuli_housemate_v1')});await page.reload({waitUntil:'networkidle'});
+
+  await nav('home');await page.evaluate(()=>{localStorage.removeItem(SPACE_STORE);localStorage.removeItem(LEGACY_STORE)});await page.reload({waitUntil:'networkidle'});
   const viewports=[360,390,768,1024,1440];const layout=[];
   for(const width of viewports){
     await page.setViewportSize({width,height:900});
@@ -208,7 +236,7 @@ async function main(){
     }
   }
   // New dialogs remain usable on a narrow viewport, including scrolling to save.
-  await page.setViewportSize({width:360,height:800});await page.evaluate(()=>go('home'));
+  await page.setViewportSize({width:360,height:800});await page.evaluate(()=>go('expenses'));
   await page.locator('[data-action=settle][data-id=e2]').click();await page.waitForTimeout(280);
   assert.equal(await page.locator('.modal').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
   await page.screenshot({path:path.join(output,'mobile-payment.png')});await close();
@@ -228,7 +256,7 @@ async function main(){
   await page.emulateMedia({reducedMotion:'no-preference'});await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(()=>document.body.classList.contains('keyboard-input')),true);
   assert.deepEqual(failures,[]);
-  const result={base,passed:true,assertions:['interactive evening scene','balanced 100/3 split','reload persistence','custom split mismatch and success','expense details','reassign chores','restore overdue status','inventory underflow guard','restock and logs','agreement reconfirmation','Escape dismissal','25 responsive layouts','rapid navigation interruption','reduced motion','keyboard motion opt-out','three mock payment methods and receipts','cancelled payments never settle','payment persistence','calendar and weekday preview','deadline sorting and reschedule','24 user-selected illustrations','creator-only deletion in all four modules','deletion cancellation and persistence','invalid amounts and empty participants','legacy migration preserving custom data','urgent-only dashboard capped at three rows','low stock ordering and replenishment','ambient motion frame changes','off-screen animation pause','motion toggle persistence','no uncaught browser errors'],layout,errors:failures};
+  const result={base,passed:true,assertions:['interactive evening scene','balanced 100/3 split','reload persistence','custom split mismatch and success','expense details','reassign chores','restore overdue status','inventory underflow guard','restock and logs','agreement reconfirmation','Escape dismissal','25 responsive layouts','rapid navigation interruption','reduced motion','keyboard motion opt-out','three mock payment methods and receipts','cancelled payments never settle','payment persistence','calendar and weekday preview','deadline sorting and reschedule','24 user-selected illustrations','creator-only deletion in all four modules','deletion cancellation and persistence','invalid amounts and empty participants','legacy migration preserving custom data','single priority queue capped at five rows','no duplicate home controls','priority and disclosure','all four deep links highlight exact record','navigation is non-mutating','claimed items do not duplicate work','empty overview has no fake tasks','settings preserve identity and preferences','low stock ordering and replenishment','ambient motion frame changes','off-screen animation pause','motion toggle persistence','no uncaught browser errors'],layout,errors:failures};
   fs.writeFileSync(path.join(output,'qa-results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.close()});

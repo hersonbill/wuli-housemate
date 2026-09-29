@@ -1,4 +1,4 @@
-const STORE_KEY = 'wuli_housemate_v1';
+const STORE_KEY = SPACE_STORE;
 const navItems = [
   ['home','home','生活总览'],['expenses','expenses','共同账本'],['chores','chores','清洁值日'],['items','items','公共物品'],['rules','rules','室友公约']
 ];
@@ -32,9 +32,9 @@ const demo = {
     {id:'r3',title:'公共区域随手归位',content:'使用完厨房和客厅后及时清理，个人物品不过夜堆放。',category:'清洁',confirmed:['u1','u3']}
   ]
 };
-let state = load(); let page = 'home'; let expenseMode = 'all'; let roomLit=false;
-function load(){try{const x=JSON.parse(localStorage.getItem(STORE_KEY));return migrateData(x?.version===1?x:structuredClone(demo))}catch{return migrateData(structuredClone(demo))}}
-function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(state))}catch{toast('浏览器暂时无法保存，当前修改将在关闭后丢失')}}
+let state = load(); let page = 'home'; let expenseMode = 'all'; let roomLit=state.roomLit===true;
+function load(){return loadHousehold(demo)}
+function save(){return saveHousehold(state)}
 function person(id){return state.people.find(p=>p.id===id)||{name:'未知',color:'#777'}}
 function money(c){return `¥${(c/100).toFixed(2)}`}
 function uid(prefix){return prefix+crypto.randomUUID()}
@@ -44,12 +44,13 @@ function toast(msg){const el=document.querySelector('#toast');el.textContent=msg
 function init(){
   const nav = navItems.map(([id,symbol,label])=>`<button class="nav-btn ${page===id?'active':''}" data-page="${id}"><span class="nav-icon">${icon(symbol)}</span><span>${label}</span></button>`).join('');
   document.querySelector('#nav').innerHTML=nav;document.querySelector('#bottom-nav').innerHTML=nav;
-  document.querySelector('#current-user').innerHTML=state.people.map(p=>`<option value="${p.id}" ${p.id===state.currentUser?'selected':''}>${p.name}</option>`).join('');
+
   save();render();
 }
 let keyboardInput=false,modalTrigger=null,closingTimer;
 const reduceMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 function go(p){
+  if(p!=='home'&&!currentSpace())return toast('请先创建或加入空间');
   if(!navItems.some(x=>x[0]===p))return;
   const previous=navItems.findIndex(x=>x[0]===page),next=navItems.findIndex(x=>x[0]===p);
   page=p;render();
@@ -60,10 +61,13 @@ function go(p){
 function pageHead(kicker,title,sub,button=''){return `<div class="page-head"><div><span class="eyebrow">${kicker}</span><h1>${title}</h1><p>${sub}</p></div>${button}</div>`}
 function pendingFor(id){return state.expenses.reduce((sum,e)=>sum+(!e.settled.includes(id)&&e.participants.includes(id)?e.shares[id]:0),0)}
 function render(){
+  if(!currentSpace())page='home';
+  applyTheme();
+  document.querySelector('#active-person').textContent=person(state.currentUser).name+' · 演示空间';
   document.querySelector('#content').innerHTML=({home:homeView,expenses:expenseView,chores:choreView,items:itemView,rules:ruleView}[page])();
   document.querySelector('#current-page-name').textContent=navItems.find(x=>x[0]===page)[2];
   document.querySelectorAll('.nav-btn').forEach(b=>{b.classList.toggle('active',b.dataset.page===page);if(b.dataset.page===page)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
-  observeAmbient();
+  updateSpaceChrome();observeAmbient();
 }
 function openModal(title,body,submit,submitLabel='保存'){
   cancelPayment();clearTimeout(closingTimer);modalTrigger=document.activeElement;
@@ -83,10 +87,10 @@ function closeModal(){
 }
 function error(msg){document.querySelector('#form-error').textContent=msg}
 function addExpense(){
-  const checks=state.people.map(p=>`<label class="check"><input type="checkbox" name="people" value="${p.id}" checked> ${p.name}</label>`).join('');
-  const custom=state.people.map(p=>`<label class="check"><span style="min-width:42px">${p.name}</span><input name="share_${p.id}" type="number" min="0" step="0.01" value="0" disabled style="width:100%"></label>`).join('');
-  openModal('记一笔共同开支',`<div class="form-grid"><div class="field full"><label>费用名称</label><input name="title" required placeholder="例如：十月水费"></div><div class="field"><label>总金额（元）</label><input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></div><div class="field"><label>垫付人</label><select name="payer">${state.people.map(p=>`<option value="${p.id}" ${p.id===state.currentUser?'selected':''}>${p.name}</option>`).join('')}</select></div>${dateFields(relativeDate(1),'结算截止日期')}<div class="field full"><label>参与室友</label><div class="check-grid">${checks}</div></div><div class="field full"><label>分摊方式</label><select name="split_mode" id="split-mode"><option value="equal">按人数均摊</option><option value="custom">自定义金额</option></select></div><div class="field full" id="custom-shares" hidden><label>每人承担金额（元，合计须等于总额）</label><div class="check-grid">${custom}</div></div></div>${iconPicker('money')}`,fd=>{
-    const cents=toCents(fd.get('amount')),parts=state.people.map(p=>p.id).filter(id=>fd.getAll('people').includes(id)),dueAt=selectedDeadline(fd);
+  const checks=members().map(p=>`<label class="check"><input type="checkbox" name="people" value="${p.id}" checked> ${esc(p.name)}</label>`).join('');
+  const custom=members().map(p=>`<label class="check"><span style="min-width:42px">${esc(p.name)}</span><input name="share_${p.id}" type="number" min="0" step="0.01" value="0" disabled style="width:100%"></label>`).join('');
+  openModal('记一笔共同开支',`<div class="form-grid"><div class="field full"><label>费用名称</label><input name="title" required placeholder="例如：十月水费"></div><div class="field"><label>总金额（元）</label><input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></div><div class="field"><label>垫付人</label><select name="payer">${members().map(p=>`<option value="${p.id}" ${p.id===state.currentUser?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>${dateFields(relativeDate(1),'结算截止日期')}<div class="field full"><label>参与室友</label><div class="check-grid">${checks}</div></div><div class="field full"><label>分摊方式</label><select name="split_mode" id="split-mode"><option value="equal">按人数均摊</option><option value="custom">自定义金额</option></select></div><div class="field full" id="custom-shares" hidden><label>每人承担金额（元，合计须等于总额）</label><div class="check-grid">${custom}</div></div></div>${iconPicker('money')}`,fd=>{
+    const cents=toCents(fd.get('amount')),parts=members().map(p=>p.id).filter(id=>fd.getAll('people').includes(id)),dueAt=selectedDeadline(fd);
     if(!fd.get('title').trim())return error('请填写费用名称');if(!Number.isSafeInteger(cents)||cents<1)return error('请输入有效金额，最多两位小数');if(!dueAt)return error('请选择结算截止日期与时间');if(!parts.length)return error('请至少选择一位参与室友');
     const shares={};
     if(fd.get('split_mode')==='custom'){
@@ -98,15 +102,19 @@ function addExpense(){
   },'确认分摊');
   document.querySelector('#split-mode').addEventListener('change',e=>{const isCustom=e.target.value==='custom',box=document.querySelector('#custom-shares');box.hidden=!isCustom;box.querySelectorAll('input').forEach(i=>i.disabled=!isCustom)});
 }
-function addChore(){openModal('添加值日任务',`<div class="form-grid"><div class="field full"><label>区域或任务</label><input name="area" required placeholder="例如：阳台整理"></div><div class="field full"><label>负责人</label><select name="person">${state.people.map(p=>`<option value="${p.id}" ${p.id===state.currentUser?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>${dateFields()}</div>${iconPicker('broom')}`,fd=>{const dueAt=selectedDeadline(fd);if(!fd.get('area').trim()||!dueAt)return error('请填写任务，并选择有效的日期和时间');state.chores.push({id:uid('c'),area:fd.get('area').trim(),iconId:fd.get('iconId'),createdBy:state.currentUser,createdAt:new Date().toISOString(),person:fd.get('person'),dueAt,status:'pending'});save();closeModal();render();toast('任务已加入，按完成时间重新排序')})}
+function addChore(){openModal('添加值日任务',`<div class="form-grid"><div class="field full"><label>区域或任务</label><input name="area" required placeholder="例如：阳台整理"></div><div class="field full"><label>负责人</label><select name="person">${members().map(p=>`<option value="${p.id}" ${p.id===state.currentUser?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>${dateFields()}</div>${iconPicker('broom')}`,fd=>{const dueAt=selectedDeadline(fd);if(!fd.get('area').trim()||!dueAt)return error('请填写任务，并选择有效的日期和时间');state.chores.push({id:uid('c'),area:fd.get('area').trim(),iconId:fd.get('iconId'),createdBy:state.currentUser,createdAt:new Date().toISOString(),person:fd.get('person'),dueAt,status:'pending'});save();closeModal();render();toast('任务已加入，按完成时间重新排序')})}
 function addItem(){openModal('登记公共物品',`<div class="form-grid"><div class="field full"><label>物品名称</label><input name="name" required placeholder="例如：厨房纸"></div><div class="field"><label>当前数量</label><input name="qty" type="number" min="0" step="1" required value="1"></div><div class="field"><label>单位</label><input name="unit" required value="个"></div><div class="field full"><label>低库存提醒阈值</label><input name="threshold" type="number" min="0" step="1" required value="1"></div></div>${iconPicker('box')}`,fd=>{const qty=Number(fd.get('qty')),threshold=Number(fd.get('threshold'));if(!fd.get('name').trim()||!fd.get('unit').trim()||!String(fd.get('qty')).trim()||!String(fd.get('threshold')).trim()||!Number.isSafeInteger(qty)||!Number.isSafeInteger(threshold)||qty<0||threshold<0)return error('请完整填写有效信息');state.items.push({id:uid('i'),name:fd.get('name').trim(),iconId:fd.get('iconId'),createdBy:state.currentUser,createdAt:new Date().toISOString(),qty,unit:fd.get('unit').trim(),threshold,claimedBy:null,logs:[{type:'restock',qty,user:state.currentUser,time:new Date().toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}]});save();closeModal();render();toast('物品已加入公共物品柜')})}
 function ruleForm(existing){openModal(existing?'编辑公约':'新建室友公约',`<div class="form-grid"><div class="field"><label>分类</label><select name="category">${['作息','访客','清洁','费用','其他'].map(x=>`<option ${existing?.category===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field full"><label>公约标题</label><input name="title" required value="${esc(existing?.title||'')}" placeholder="一句话说清约定"></div><div class="field full"><label>具体内容</label><textarea name="content" rows="4" required placeholder="写清适用场景和共同约定">${esc(existing?.content||'')}</textarea></div></div>${iconPicker(existing?.iconId||'heart')}`,fd=>{if(!fd.get('title').trim()||!fd.get('content').trim())return error('请完整填写公约内容');if(existing){existing.title=fd.get('title').trim();existing.content=fd.get('content').trim();existing.category=fd.get('category');existing.confirmed=[];existing.iconId=fd.get('iconId')}else state.rules.push({id:uid('r'),title:fd.get('title').trim(),content:fd.get('content').trim(),category:fd.get('category'),iconId:fd.get('iconId'),createdBy:state.currentUser,createdAt:new Date().toISOString(),confirmed:[state.currentUser]});save();closeModal();render();toast(existing?'公约已更新，请大家重新确认':'新公约已建立')})}
-function itemChange(id,kind){const x=state.items.find(i=>i.id===id);openModal(kind==='consume'?`消耗 ${x.name}`:`补货 ${x.name}`,`<div class="form-grid"><div class="field full"><label>数量（${esc(x.unit)}）</label><input name="qty" type="number" min="1" step="1" required value="1"></div><p style="grid-column:1/-1;color:var(--muted);font-size:13px">当前库存：${x.qty}${esc(x.unit)}。操作会记入 ${person(state.currentUser).name} 的物品流水。</p></div>`,fd=>{const q=Number(fd.get('qty'));if(!Number.isSafeInteger(q)||q<=0||!Number.isSafeInteger(x.qty+q))return error('请输入大于 0 的数量');if(kind==='consume'&&q>x.qty)return error(`库存不足，最多可消耗 ${x.qty}${esc(x.unit)}`);x.qty+=kind==='consume'?-q:q;x.logs.unshift({type:kind,qty:q,user:state.currentUser,time:new Date().toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})});if(kind==='restock')x.claimedBy=null;save();closeModal();render();toast(kind==='consume'?'消耗已记录':'补货已记录，感谢你照顾屋里')},kind==='consume'?'确认消耗':'确认补货')}
+function itemChange(id,kind){const x=state.items.find(i=>i.id===id);openModal(kind==='consume'?`消耗 ${x.name}`:`补货 ${x.name}`,`<div class="form-grid"><div class="field full"><label>数量（${esc(x.unit)}）</label><input name="qty" type="number" min="1" step="1" required value="1"></div><p style="grid-column:1/-1;color:var(--muted);font-size:13px">当前库存：${x.qty}${esc(x.unit)}。操作会记入 ${esc(person(state.currentUser).name)} 的物品流水。</p></div>`,fd=>{const q=Number(fd.get('qty'));if(!Number.isSafeInteger(q)||q<=0||!Number.isSafeInteger(x.qty+q))return error('请输入大于 0 的数量');if(kind==='consume'&&q>x.qty)return error(`库存不足，最多可消耗 ${x.qty}${esc(x.unit)}`);x.qty+=kind==='consume'?-q:q;x.logs.unshift({type:kind,qty:q,user:state.currentUser,time:new Date().toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})});if(kind==='restock')x.claimedBy=null;save();closeModal();render();toast(kind==='consume'?'消耗已记录':'补货已记录，感谢你照顾屋里')},kind==='consume'?'确认消耗':'确认补货')}
 function showLogs(id){const x=state.items.find(i=>i.id===id);openModal(`${x.name} · 消耗记录`,`<div class="list">${x.logs.map(l=>`<div class="list-row"><span>${l.type==='consume'?'−':'＋'}</span><div class="row-main"><b>${l.type==='consume'?'消耗':'补货'} ${l.qty}${esc(x.unit)}</b><small>${esc(person(l.user).name)} · ${esc(l.time)}</small></div></div>`).join('')||'<div class="empty"><b>还没有记录</b>首次消耗或补货后会显示在这里</div>'}</div>`,()=>{},'关闭');document.querySelector('form.modal').onsubmit=e=>{e.preventDefault();closeModal()}}
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;if(b.dataset.page)return go(b.dataset.page);
   const a=b.dataset.action,id=b.dataset.id;
-  if(a==='toggle-light'){roomLit=!roomLit;document.querySelector('.hero').classList.toggle('is-evening',roomLit);b.setAttribute('aria-pressed',String(roomLit));b.querySelector('span').textContent=roomLit?'回到午后':'点亮小屋'}
+  if(a==='open-settings')spaceSettings();
+  if(a==='open-queue')openQueueEntry(b.dataset.kind,id);
+  if(a==='expand-queue'){homeExpanded=!homeExpanded;render();document.querySelector('[data-action=expand-queue]')?.focus({preventScroll:true})}
+  if(a==='toggle-light'){roomLit=!roomLit;state.roomLit=roomLit;save();document.querySelector('.hero')?.classList.toggle('is-evening',roomLit);b.setAttribute('aria-pressed',String(roomLit));b.textContent=roomLit?'暖灯':'午后'}
+  if(a==='reset-demo')resetAllSpaces();
   if(a==='close')closeModal();
   if(a==='expense-detail'){const x=state.expenses.find(x=>x.id===id);openModal(x.title+' · 分摊明细',`<div class="list">${x.participants.map(p=>`<div class="list-row">${avatar(p)}<div class="row-main"><b>${esc(person(p).name)}</b><small>${p===x.payer?'垫付人 · 本人份额':x.settled.includes(p)?(x.payments?.some(pay=>pay.user===p)?'演示支付已结清':'已结清 · 原有记录'):'待结算（演示支付）'}</small></div><span class="amount">${money(x.shares[p])}</span></div>`).join('')}</div>`,()=>closeModal(),'知道了')}if(a==='add-expense')addExpense();if(a==='add-chore')addChore();if(a==='add-item')addItem();if(a==='add-rule')ruleForm();
   if(a==='settle')startPayment(id);
@@ -114,15 +122,15 @@ document.addEventListener('click',e=>{
   if(a==='reschedule')rescheduleChore(id);
   if(a==='toggle-motion'){state.motionEnabled=state.motionEnabled===false;save();syncAmbient()}
   if(a==='toggle-chore'){const x=state.chores.find(x=>x.id===id);if(x.status==='done'){x.status=x.dueAt&&Date.parse(x.dueAt)<Date.now()?'overdue':'pending'}else{x.previousStatus=x.status;x.status='done'}save();render();toast(x.status==='done'?'辛苦了，任务已完成':'任务已恢复为待完成')}
-  if(a==='reassign'){const x=state.chores.find(x=>x.id===id);openModal('调整负责人',`<div class="field"><label for="assigned-person">${esc(x.area)} · 本次负责人</label><select id="assigned-person" name="person">${state.people.map(p=>`<option value="${p.id}" ${p.id===x.person?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`,fd=>{x.person=fd.get('person');save();closeModal();render();toast(`已安排给 ${person(x.person).name}`)})}
+  if(a==='reassign'){const x=state.chores.find(x=>x.id===id);openModal('调整负责人',`<div class="field"><label for="assigned-person">${esc(x.area)} · 本次负责人</label><select id="assigned-person" name="person">${members().map(p=>`<option value="${p.id}" ${p.id===x.person?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`,fd=>{x.person=fd.get('person');save();closeModal();render();toast(`已安排给 ${person(x.person).name}`)})}
   if(a==='claim'){const x=state.items.find(x=>x.id===id);x.claimedBy=state.currentUser;save();render();toast('已在本演示空间认领采购')}
   if(a==='item-change')itemChange(id,b.dataset.kind);if(a==='logs')showLogs(id);
   if(a==='confirm-rule'){const x=state.rules.find(x=>x.id===id);if(!x.confirmed.includes(state.currentUser)){x.confirmed.push(state.currentUser);save();render();toast('已确认这条共同约定')}}
   if(a==='edit-rule')ruleForm(state.rules.find(x=>x.id===id));
   if(b.dataset.filter){expenseMode=b.dataset.filter;render()}
 });
-document.querySelector('#current-user').addEventListener('change',e=>{closeModal();state.currentUser=e.target.value;save();render();toast(`已切换为 ${person(state.currentUser).name}`)});
-document.querySelector('#reset-btn').addEventListener('click',()=>{if(confirm('确定恢复为最初的演示数据吗？')){state=migrateData(structuredClone(demo));save();init();toast('演示数据已重置')}});
+document.addEventListener('change',e=>{if(e.target.id==='current-user')switchPerson(e.target.value)});
+
 document.addEventListener('pointerdown',()=>{keyboardInput=false;document.body.classList.remove('keyboard-input')});
 document.addEventListener('keydown',e=>{
   keyboardInput=true;document.body.classList.add('keyboard-input');
@@ -133,7 +141,7 @@ document.addEventListener('keydown',e=>{
   if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}
 });
 document.querySelector('#modal-root').addEventListener('click',e=>{if(e.target.classList.contains('modal-backdrop'))closeModal()});
-init();
+init();checkInvitation();
 // Refresh urgency when a deadline passes, without interrupting forms.
 setInterval(()=>{if(!document.hidden&&!document.querySelector('.modal')&&['home','chores','expenses'].includes(page))render()},60000);
 function toCents(value){const text=String(value||'').trim();if(!/^\d+(?:\.\d{1,2})?$/.test(text))return NaN;const [whole,decimal='']=text.split('.');const cents=Number(whole)*100+Number(decimal.padEnd(2,'0'));return Number.isSafeInteger(cents)?cents:NaN}
